@@ -63,7 +63,6 @@ spec:
 
 ---
 # ── 3. NETWORK POLICY — Default deny all, then allow selectively ──────────
-# Block all ingress by default
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -142,17 +141,14 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # DNS resolution
     - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
           port: 53
-    # HTTPS to external services (avatar API, etc.)
     - ports:
         - protocol: TCP
           port: 443
-    # Internal cluster communication
     - to:
         - namespaceSelector: {}
       ports:
@@ -192,5 +188,6 @@ subjects:
     namespace: know-your-team
 roleRef:
   kind: Role
-  apiRef: know-your-team-role
+  # FIX: 'apiRef' ko 'name' se replace kiya hai.
+  name: know-your-team-role
   apiGroup: rbac.authorization.k8s.io
