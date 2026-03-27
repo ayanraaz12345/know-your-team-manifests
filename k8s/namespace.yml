@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/managed-by: argocd
+    environment: production

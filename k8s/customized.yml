@@ -1,0 +1,196 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  CUSTOMIZED — Network Policies, Resource Quotas, LimitRange
+#  Production hardening for Know Your Team namespace
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── 1. RESOURCE QUOTA — Namespace-level resource caps ─────────────────────
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: know-your-team-quota
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: quota
+spec:
+  hard:
+    # Compute
+    requests.cpu: "2"
+    requests.memory: "2Gi"
+    limits.cpu: "4"
+    limits.memory: "4Gi"
+    # Object counts
+    pods: "20"
+    services: "10"
+    secrets: "20"
+    configmaps: "20"
+    persistentvolumeclaims: "5"
+    # Service types
+    services.loadbalancers: "1"
+    services.nodeports: "0"   # No NodePort allowed in production
+
+---
+# ── 2. LIMIT RANGE — Default container limits if not specified ─────────────
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: know-your-team-limits
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: limitrange
+spec:
+  limits:
+    # Container defaults
+    - type: Container
+      default:
+        cpu: "200m"
+        memory: "256Mi"
+      defaultRequest:
+        cpu: "50m"
+        memory: "64Mi"
+      max:
+        cpu: "1"
+        memory: "1Gi"
+      min:
+        cpu: "10m"
+        memory: "32Mi"
+    # Pod-level max
+    - type: Pod
+      max:
+        cpu: "2"
+        memory: "2Gi"
+
+---
+# ── 3. NETWORK POLICY — Default deny all, then allow selectively ──────────
+# Block all ingress by default
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+    - Egress
+
+---
+# Allow frontend → backend traffic
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+spec:
+  podSelector:
+    matchLabels:
+      app: know-your-team-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: know-your-team-frontend
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 5000
+
+---
+# Allow ingress-nginx → frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-frontend
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+spec:
+  podSelector:
+    matchLabels:
+      app: know-your-team-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 80
+
+---
+# Allow egress to DNS and external APIs
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-dns-and-external
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # HTTPS to external services (avatar API, etc.)
+    - ports:
+        - protocol: TCP
+          port: 443
+    # Internal cluster communication
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: TCP
+          port: 5000
+        - protocol: TCP
+          port: 80
+
+---
+# ── 4. ROLE & ROLE BINDING — Minimal RBAC ─────────────────────────────────
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: know-your-team-role
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list"]
+
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: know-your-team-rolebinding
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+subjects:
+  - kind: ServiceAccount
+    name: know-your-team-sa
+    namespace: know-your-team
+roleRef:
+  kind: Role
+  apiRef: know-your-team-role
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,115 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  ARGOCD APPLICATION — Know Your Team
+#  Apply to ArgoCD namespace:
+#    kubectl apply -f argocd-application.yml -n argocd
+#
+#  Prerequisites:
+#    helm repo add argo https://argoproj.github.io/argo-helm
+#    helm install argocd argo/argo-cd -n argocd --create-namespace
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: know-your-team
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: know-your-team
+    environment: production
+  finalizers:
+    # Cascade delete: remove all K8s resources when this App is deleted from ArgoCD
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    # Slack / webhook notifications (requires argocd-notifications)
+    notifications.argoproj.io/subscribe.on-deployed.slack: devops-alerts
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: devops-alerts
+
+spec:
+  # ── Which ArgoCD project to use ─────────────────────────────────────────
+  project: default
+
+  # ── Source: your manifests Git repo ─────────────────────────────────────
+  source:
+    repoURL: https://github.com/ayanraaz12345/know-your-team-manifests # 🔁 Replace
+    targetRevision: main
+    path: k8s # folder inside the manifests repo
+
+  # ── Destination cluster & namespace ─────────────────────────────────────
+  destination:
+    server: https://kubernetes.default.svc # in-cluster
+    namespace: know-your-team
+
+  # ── Sync policy (GitOps automated sync) ─────────────────────────────────
+  syncPolicy:
+    automated:
+      prune: true # remove resources no longer in Git
+      selfHeal: true # revert manual changes to match Git
+      allowEmpty: false # never sync an empty app
+
+    syncOptions:
+      - CreateNamespace=true # create namespace if missing
+      - PrunePropagationPolicy=foreground
+      - PruneLast=true # prune after all new resources are healthy
+      - RespectIgnoreDifferences=true
+      - ApplyOutOfSyncOnly=true # only sync changed resources
+
+    retry:
+      limit: 5
+      backoff:
+        duration: 10s
+        factor: 2
+        maxDuration: 3m
+
+  # ── Health checks & ignore diffs ────────────────────────────────────────
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas # ignore HPA-managed replica count changes
+
+  revisionHistoryLimit: 10
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  ARGOCD PROJECT — Know Your Team
+#  Restricts which clusters/repos/namespaces this app can touch
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: know-your-team-project
+  namespace: argocd
+  labels:
+    app.kubernetes.io/name: know-your-team
+spec:
+  description: "Know Your Team — production GitOps project"
+
+  sourceRepos:
+    - https://github.com/YOUR_GITHUB_ORG/know-your-team-manifests # 🔁 Replace
+
+  destinations:
+    - namespace: know-your-team
+      server: https://kubernetes.default.svc
+
+  # Only allow these Kubernetes resources
+  clusterResourceWhitelist:
+    - group: ""
+      kind: Namespace
+    - group: cert-manager.io
+      kind: ClusterIssuer
+
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+
+  # Prevent accidental deletion of namespace
+  namespaceResourceBlacklist:
+    - group: ""
+      kind: ResourceQuota
+
+  roles:
+    - name: read-only
+      description: "Read-only access to the project"
+      policies:
+        - p, proj:know-your-team-project:read-only, applications, get, know-your-team-project/*, allow
+      groups:
+        - developers

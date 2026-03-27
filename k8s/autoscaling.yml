@@ -1,0 +1,137 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  HORIZONTAL POD AUTOSCALER — Backend
+#  Scales 2 → 10 pods based on CPU & Memory
+#  Requires: metrics-server installed in cluster
+#    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: know-your-team-backend-hpa
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: backend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: know-your-team-backend
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+    # Scale up when average CPU across pods exceeds 60%
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+    # Scale up when average memory exceeds 70%
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 70
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30    # react quickly on traffic spikes
+      policies:
+        - type: Pods
+          value: 2                       # add up to 2 pods at a time
+          periodSeconds: 30
+        - type: Percent
+          value: 50                      # or 50% of current replicas
+          periodSeconds: 30
+      selectPolicy: Max                  # use whichever adds more pods
+    scaleDown:
+      stabilizationWindowSeconds: 300   # wait 5 min before scaling down
+      policies:
+        - type: Pods
+          value: 1                       # remove only 1 pod at a time
+          periodSeconds: 60
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  HORIZONTAL POD AUTOSCALER — Frontend
+#  Scales 2 → 8 pods based on CPU
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: know-your-team-frontend-hpa
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: frontend
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: know-your-team-frontend
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 65
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  POD DISRUPTION BUDGET — Backend
+#  Ensures at least 1 pod is always available during disruptions
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: know-your-team-backend-pdb
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: backend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: know-your-team-backend
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  POD DISRUPTION BUDGET — Frontend
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: know-your-team-frontend-pdb
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: frontend
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: know-your-team-frontend

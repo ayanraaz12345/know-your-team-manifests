@@ -1,0 +1,90 @@
+# ─────────────────────────────────────────────────────────────────────────────
+#  SERVICE — Backend (ClusterIP — internal only, accessed via Ingress)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: know-your-team-backend
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: backend
+    tier: backend
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "5000"
+spec:
+  type: ClusterIP
+  selector:
+    app: know-your-team-backend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 5000
+      targetPort: 5000
+  sessionAffinity: None
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  SERVICE — Frontend (ClusterIP — accessed via Ingress)
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: know-your-team-frontend
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: frontend
+    tier: frontend
+spec:
+  type: ClusterIP
+  selector:
+    app: know-your-team-frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+  sessionAffinity: None
+
+---
+# ─────────────────────────────────────────────────────────────────────────────
+#  SERVICE — LoadBalancer (Public-facing entry point)
+#  Use this when you want a cloud Load Balancer without Ingress.
+#  In production with Ingress, you can remove this or keep it for direct access.
+# ─────────────────────────────────────────────────────────────────────────────
+apiVersion: v1
+kind: Service
+metadata:
+  name: know-your-team-loadbalancer
+  namespace: know-your-team
+  labels:
+    app.kubernetes.io/name: know-your-team
+    app.kubernetes.io/component: loadbalancer
+  annotations:
+    # AWS EKS annotations
+    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
+    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
+    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
+    # GKE annotations (comment out AWS ones above if using GKE)
+    # cloud.google.com/load-balancer-type: "External"
+    # Azure AKS annotations
+    # service.beta.kubernetes.io/azure-load-balancer-sku: "standard"
+spec:
+  type: LoadBalancer
+  selector:
+    app: know-your-team-frontend
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 80
+    - name: https
+      protocol: TCP
+      port: 443
+      targetPort: 80     # TLS terminated at Ingress / LB level
+  # Uncomment to lock down source IPs:
+  # loadBalancerSourceRanges:
+  #   - "0.0.0.0/0"
+  externalTrafficPolicy: Local   # preserves client IP
