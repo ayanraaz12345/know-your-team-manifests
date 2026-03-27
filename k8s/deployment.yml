@@ -52,7 +52,7 @@ spec:
       containers:
         - name: backend
           # ⚠️  Image tag is updated automatically by GitHub Actions CI/CD
-          image: ghcr.io/YOUR_GITHUB_ORG/know-your-team-backend:latest
+          image: ghcr.io/ayanraaz12345/know-your-team-backend:sha-9bd5e65
           imagePullPolicy: Always
           ports:
             - name: http
@@ -186,7 +186,7 @@ spec:
       containers:
         - name: frontend
           # ⚠️  Image tag is updated automatically by GitHub Actions CI/CD
-          image: ghcr.io/YOUR_GITHUB_ORG/know-your-team-frontend:latest
+          image: ghcr.io/ayanraaz12345/know-your-team-frontend:sha-9bd5e65
           imagePullPolicy: Always
           ports:
             - name: http
