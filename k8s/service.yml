@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-#  SERVICE — Backend (ClusterIP — internal only, accessed via Ingress)
+#  SERVICE — Backend (No changes)
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
@@ -26,7 +26,7 @@ spec:
 
 ---
 # ─────────────────────────────────────────────────────────────────────────────
-#  SERVICE — Frontend (ClusterIP — accessed via Ingress)
+#  SERVICE — Frontend (No changes)
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
@@ -50,9 +50,7 @@ spec:
 
 ---
 # ─────────────────────────────────────────────────────────────────────────────
-#  SERVICE — LoadBalancer (Public-facing entry point)
-#  Use this when you want a cloud Load Balancer without Ingress.
-#  In production with Ingress, you can remove this or keep it for direct access.
+#  SERVICE — LoadBalancer (FIXED FOR QUOTA ERROR)
 # ─────────────────────────────────────────────────────────────────────────────
 apiVersion: v1
 kind: Service
@@ -62,17 +60,10 @@ metadata:
   labels:
     app.kubernetes.io/name: know-your-team
     app.kubernetes.io/component: loadbalancer
-  annotations:
-    # AWS EKS annotations
-    service.beta.kubernetes.io/aws-load-balancer-type: "nlb"
-    service.beta.kubernetes.io/aws-load-balancer-scheme: "internet-facing"
-    service.beta.kubernetes.io/aws-load-balancer-cross-zone-load-balancing-enabled: "true"
-    # GKE annotations (comment out AWS ones above if using GKE)
-    # cloud.google.com/load-balancer-type: "External"
-    # Azure AKS annotations
-    # service.beta.kubernetes.io/azure-load-balancer-sku: "standard"
 spec:
-  type: LoadBalancer
+  # CHANGE: Yahan 'LoadBalancer' ki jagah 'ClusterIP' kiya hai. 
+  # Reason: Error "exceeded quota: services.nodeports=0"
+  type: ClusterIP 
   selector:
     app: know-your-team-frontend
   ports:
@@ -83,8 +74,4 @@ spec:
     - name: https
       protocol: TCP
       port: 443
-      targetPort: 80     # TLS terminated at Ingress / LB level
-  # Uncomment to lock down source IPs:
-  # loadBalancerSourceRanges:
-  #   - "0.0.0.0/0"
-  externalTrafficPolicy: Local   # preserves client IP
+      targetPort: 80
